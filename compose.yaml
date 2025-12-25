@@ -1,0 +1,83 @@
+include:
+  - proxy.yaml
+
+services:
+  db:
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: YtReWq4321
+      MYSQL_DATABASE: virtd
+      MYSQL_USER: app
+      MYSQL_PASSWORD: QwErTy1234
+    networks:
+      backend:
+        ipv4_address: 172.20.0.10
+    volumes:
+      - mysql_:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uapp", "-pQwErTy1234"]
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+      interval: 3s
+
+  db-init:
+    image: mysql:8
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      backend:
+        ipv4_address: 172.20.0.11
+    command: >
+      bash -c "
+        set -e;
+        echo 'Ожидание полной готовности MySQL...';
+        for i in {1..20}; do
+          if mysql -h db -uapp -pQwErTy1234 -e 'SELECT 1' virtd &> /dev/null; then
+            echo '✅ Подключение к БД успешно';
+            break;
+          fi;
+          echo \"⏳ Попытка $$i/20\";
+          sleep 2;
+        done;
+        echo 'Создание таблицы requests...';
+        mysql -h db -uapp -pQwErTy1234 virtd -e '
+          CREATE TABLE IF NOT EXISTS requests (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            request_date DATETIME,
+            request_ip VARCHAR(255)
+          );
+        ';
+        echo '✅ Таблица создана. Инициализация завершена.';
+      "
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    restart: always
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: virtd
+      DB_USER: app
+      DB_PASSWORD: QwErTy1234
+    networks:
+      backend:
+        ipv4_address: 172.20.0.5
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+
+networks:
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+volumes:
+  mysql_:

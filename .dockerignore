@@ -1,0 +1,10 @@
+.git
+__pycache__
+*.pyc
+*.log
+.env
+.env2
+README.md
+.gitignore
+compose.yaml
+proxy.yaml
